@@ -5,10 +5,10 @@ cmsev
 
 cd MultileptonJetMetAnalysis
 
-make clean -f <Makefile>
+make clean -f Makefile.multileptonjetmetanalysis
 
-make cling -f <Makefile>
+make cling -f Makefile.multileptonjetmetanalysis
 
-make -f <Makefile>
+make -f Makefile.multileptonjetmetanalysis
 
-./<executable> <jobcard>
+./executable jobcard
