@@ -4,7 +4,7 @@
 #include <vector>
 #include <map>
 #include <string>
-
+#include "TLorentzVector.h"
 #include "TObject.h"
 
 namespace vhtm {
@@ -18,7 +18,7 @@ namespace vhtm {
     float eta;
     float phi;
    
-    ClassDef(Candidate,1)
+    ClassDef(Candidate, 1)
   };
 
   class PackedPFCandidate: public TObject {
@@ -29,7 +29,9 @@ namespace vhtm {
     float pt;
     float eta;
     float phi;
+    float phiAtVtx;
     float energy;
+    bool trackHighPurity;
     
     int pdgId;
     int charge;
@@ -39,13 +41,24 @@ namespace vhtm {
     double vz;
    
     int fromPV;
-    // w.r.t PV
+    // w.r.t PV (essentially pv[0])
     float dxy;
     float dz;
     float dxyError;
     float dzError;
 
-    std::map< std::string,std::vector<double> > isolationMap;
+    // wrt PV with highest sumPtTracks
+    float dxyEV;
+    float dzEV;
+    float dzAssociatedPV;
+
+    int numberOfHits;
+    int numberOfPixelHits;
+    int pixelLayersWithMeasurement;
+    int stripLayersWithMeasurement;
+    int lostInnerHits;
+
+    std::map<std::string, std::vector<double>> isolationMap;
 
     ClassDef(PackedPFCandidate, 1)
   };
@@ -55,20 +68,15 @@ namespace vhtm {
     Event();
     virtual ~Event() {}
   
-    unsigned int run;
-    unsigned int event;
-    unsigned int lumis;
-    unsigned int bunch;
-    unsigned int orbit;
+    unsigned long run;
+    unsigned long event;
+    unsigned long lumis;
+    unsigned long bunch;
+    unsigned long orbit;
     double time;
     bool isdata;
   
-    bool isPhysDeclared;
-    bool isBPTX0;
-    bool isBSCMinBias;
-    bool isBSCBeamHalo;
-    bool isPrimaryVertex;
-    //bool isBeamScraping;
+    bool hasPrimaryVertex;
     bool passHBHENoiseFilter;
   
     double rho;
@@ -92,8 +100,27 @@ namespace vhtm {
     GenEvent();
     virtual ~GenEvent() {}
   
+    double evtWeight;
     unsigned int processID;
     double ptHat;
+       int nMEPartons;
+    double qScale;
+    double alphaQCD;
+    double alphaQED;
+
+    double qScalePdf;
+    double x1Pdf;
+    double x2Pdf;
+       int id1Pdf;
+       int id2Pdf;
+
+    double lheHt;
+       int lheNOutPartons;
+
+    std::vector<double> pdfWeightList;
+    std::vector<double> alphasWeightList;
+    std::vector<double> qcdScaleWeightList;
+
     std::vector<double> pdfWeights;
   
     ClassDef(GenEvent, 1)
@@ -103,10 +130,12 @@ namespace vhtm {
   public:
     Electron();
     ~Electron() {}
+
     double eta;
     double phi;
     double pt;
     bool ecalDriven;
+    bool isGap;
     bool hasGsfTrack;
     double trackPt;
     double energy;
@@ -138,6 +167,7 @@ namespace vhtm {
     double scET;
     double scRawEnergy;
     float BDT;  
+    float BDTpreComp;  
     // Vertex association variables
     double dxyPV;
     double dzPV;
@@ -172,9 +202,12 @@ namespace vhtm {
     bool isTriggerElectron;
     int fidFlag;
     std::map<std::string, float> idmap;
-    int selbit;
-
-    std::map< std::string,std::vector<double> > isolationMap;
+    bool passMediumId;
+    bool passTightId;
+    int mvaCategory;
+    float ElectronMVAEstimatorRun2Spring15NonTrig25nsV1Values;
+    std::map<std::string,std::vector<double>> isolationMap;
+    std::vector<TLorentzVector> associatedPackedPFCandidatesP4;
 
     ClassDef(Electron, 1)
   };
@@ -228,6 +261,10 @@ namespace vhtm {
     double met;
     double metphi;
     double sumet;
+    
+    double metJESUp;
+    double metJESDn;
+
     double metuncorr;
     double metphiuncorr;
     double sumetuncorr;
@@ -245,72 +282,74 @@ namespace vhtm {
     double energy;
     int charge;
     double mass;
-    
+  
     double dxyPV;
+    double dxyPVError;
     double dzPV;
+    double dzPVError;
     int vtxIndex;
     double vtxDxy;
     double vtxDz;
-    
+
     // Leading particle pT
     double leadChargedParticlePt;
     double leadNeutralParticlePt;
     double leadParticlePt;
-    
+
     std::vector<vhtm::Candidate> sigChHadList;
     std::vector<vhtm::Candidate> sigNeHadList;
     std::vector<vhtm::Candidate> sigGammaList;
     std::vector<vhtm::Candidate> isoChHadList;
     std::vector<vhtm::Candidate> isoNeHadList;
     std::vector<vhtm::Candidate> isoGammaList;
-    
+
     float ptSumChargedHadronsIsoCone;
     float ptSumNeutralHadronsIsoCone;
     float ptSumPhotonsIsoCone;
-    
+
     // tau id. discriminators
     float decayModeFinding;
     float decayModeFindingNewDMs;
-    float decayModeFindingOldDMs;
+    //float decayModeFindingOldDMs;
+    int decayMode;
     
     // discriminators against electrons/muons
-    float againstMuonLoose;
-    float againstMuonMedium;
-    float againstMuonTight;
-    
     float againstMuonLoose3;
     float againstMuonTight3;
     
-    float againstElectronLoose;
-    float againstElectronMedium;
-    float againstElectronTight;
-    //float againstElectronMVA;
-    
-    float againstElectronLooseMVA5;
-    float againstElectronMediumMVA5;
-    float againstElectronTightMVA5;
+    float againstElectronVLooseMVA;
+    float againstElectronLooseMVA;
+    float againstElectronMediumMVA;
+    float againstElectronTightMVA;
+    float againstElectronVTightMVA;
     
     float byLooseCombinedIsolationDeltaBetaCorr3Hits;
     float byMediumCombinedIsolationDeltaBetaCorr3Hits;
     float byTightCombinedIsolationDeltaBetaCorr3Hits;
     float byCombinedIsolationDeltaBetaCorrRaw3Hits;
+    
+    float byVLooseIsolationMVArun2v1DBoldDMwLT;
+    float byLooseIsolationMVArun2v1DBoldDMwLT;
+    float byMediumIsolationMVArun2v1DBoldDMwLT;
+    float byTightIsolationMVArun2v1DBoldDMwLT;
+    float byVTightIsolationMVArun2v1DBoldDMwLT;
+    
     float chargedIsoPtSum;
     float neutralIsoPtSum;
     float puCorrPtSum;
     
-    // kinematic variables for PFJet associated to PFTau
+     // kinematic variables for PFJet associated to PFTau
     double jetPt;
     double jetEta;
     double jetPhi;
-    float emFraction;
+     float emFraction;
     double vx;
     double vy;
     double vz;
-    
+  
     double zvertex;
     double dxySig;
-    int selbit;
-    
+  
     ClassDef(Tau, 1)
   };
   class Muon: public TObject {
@@ -321,6 +360,13 @@ namespace vhtm {
     bool isTrackerMuon;
     bool isPFMuon;
     bool isghostCleaned;
+    bool passTrackerhighPtid;
+    bool isLooseMuon;
+    bool isMediumMuon;
+    bool isGoodMedMuon;
+    bool isTightMuon;
+    float chi2LocalPosition;
+    float trkKink;
 
     double eta;
     double phi;
@@ -337,11 +383,8 @@ namespace vhtm {
     double globalChi2;
     double tkNChi2;
 
-    float trkIso;
-    float ecalIso;
-    float hcalIso;
-    float hoIso;
     float pfChargedIsoR03;
+    float pfChargedHadIsoR03;
     float pfNeutralHadIsoR03;
     float pfPhotonIso03;    
     float sumPUPt03;
@@ -370,7 +413,7 @@ namespace vhtm {
     double vy;
     double vz;
 
-    double dB;//2D
+    double dB;  // 2D
     double edB;    
   
     double dB3D;
@@ -391,8 +434,7 @@ namespace vhtm {
    
     int nSegments;
 
-    int selbit;
-    std::map< std::string,std::vector<double> > isolationMap;
+    std::map<std::string,std::vector<double>> isolationMap;
 
     ClassDef(Muon, 1)
   };
@@ -427,14 +469,11 @@ namespace vhtm {
     int photonMultiplicity;
     int nConstituents;
 
-    //float simpleSecondaryVertexHighEffBTag;
-    //float simpleSecondaryVertexHighPurBTag;
-
     float combinedSecondaryVertexBTag;
-    //double combinedSecondaryVertexMVABTag;
     float combinedInclusiveSecondaryVertexBTag;
     float combinedInclusiveSecondaryVertexV2BJetTags;
-    //double combinedMVABTag;
+    float pfCombinedInclusiveSecondaryVertexV2BJetTags;
+
     std::map<std::string, float> discrimap;
     
     float jpumva;
@@ -442,8 +481,6 @@ namespace vhtm {
     int passLooseID;
     int passTightID;
   
-    int selbit;
-
     ClassDef(Jet, 1)
   };
   class Vertex: public TObject {
@@ -460,11 +497,8 @@ namespace vhtm {
     double rho;
     double chi2;
     double ndf;
-
     bool isfake;
     bool isvalid;
-
-    int selbit;
 
     ClassDef(Vertex, 1)
   };
@@ -580,9 +614,7 @@ namespace vhtm {
     double dPhiTracksAtEcal;
     double dEtaTracksAtEcal;  
     
-    int selbit;
-  
-    std::map< std::string,std::vector<double> > isolationMap;
+    std::map<std::string,std::vector<double>> isolationMap;
 
     ClassDef(Photon, 1)
   };

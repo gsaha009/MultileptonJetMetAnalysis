@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <map>
 #include <algorithm>
 
@@ -17,16 +18,17 @@
 #include "TVector3.h"
 
 #include "PhysicsObjects.h"
+#include "AnaUtil.h"
 
-typedef unsigned int uint;
-typedef unsigned long ulong;
+using uint = unsigned int;
+using ulong = unsigned long;
 
 // REQUIRED, most probably to solve circular dependence problem!!!
-class AnaBase;
 class TChain;
 class TFile;
 using std::ofstream;
 using std::ifstream;
+
 template <class T>
 class PtComparator {
 public:
@@ -70,31 +72,30 @@ public:
     
   virtual void eventLoop() = 0;  // the main analysis
   virtual bool beginJob();
-  virtual void endJob() = 0;
+  virtual void endJob();
+  virtual bool readJob(const std::string& jobFile, int& nFiles);
+  virtual void printJob(std::ostream& os=std::cout) const;
 
-  virtual void selectEvent() = 0;
+  virtual bool openFiles();
+  virtual void closeFiles(); 
 
   int setInputFile(const std::string& fname);
   bool branchFound(const std::string& b);
   int getEntries() const;
   void setData(int val);  
   int getRunNumber() const;
-  virtual bool openFiles();
-  virtual void closeFiles(); 
-  virtual bool readJob(const std::string& jobFile, int& nFiles);
-  virtual void printJob(std::ostream& os=std::cout) const;
-  void showEventNumber(bool addNewline=true, std::ostream& os=std::cout) const {
+  void showEventNumber(std::ostream& os=std::cout, bool addNewline=true) const {
     const vhtm::Event& evt = eventList_->at(0);
-    std::cout << ">>> Run " << evt.run
-	      << " Lumis " << evt.lumis 
-	      << " Event " << evt.event;
-    if (addNewline) std::cout << std::endl;
+    os << ">>> Run " << evt.run
+       << " Lumis " << evt.lumis 
+       << " Event " << evt.event;
+    if (addNewline) os << std::endl;
   }
   bool isTriggered(bool check_prescale=true, bool verbose=false) const;
-  virtual void dumpTriggerPaths(std::ostream& os=std::cout, bool check_prescale=true) const;
+  void dumpTriggerPaths(std::ostream& os=std::cout, bool check_prescale=true) const;
   void dumpTriggerObjectInfo(const std::vector<vhtm::TriggerObject>& list, std::ostream& os=std::cout) const;
-  double wtPileUp(int& nPU) const;
-  bool readPileUpHist();
+  double wtPileUp(int& nPU, bool verbose=false) const;
+  bool readPileUpHist(bool verbose=false);
   bool matchTriggerPath(const std::vector<std::string>& v, const std::string& path) const;
   double matchTriggerObject(const std::vector<vhtm::TriggerObject>& trigObjList, 
                             const TLorentzVector& obj, 
@@ -112,25 +113,8 @@ public:
   int getMotherId(const vhtm::GenParticle& gp, int& mmid) const;
 
   void findVtxInfo(std::vector<vhtm::Vertex>& list, Options& op, std::ostream& os=std::cout);
-  void findElectronInfo(std::vector<vhtm::Electron>& list, double vz, Options& op, std::ostream& os=std::cout);
-  void findMuonInfo(std::vector<vhtm::Muon>& list, double vz, Options& op, std::ostream& os=std::cout);
-  void findTauInfo(std::vector<vhtm::Tau>& list, double vz, Options& op, std::ostream& os=std::cout);
-  void findJetInfo(std::vector<vhtm::Jet>& list, Options& op, std::ostream& os=std::cout);
   void findTriggerObjectInfo(std::vector<vhtm::TriggerObject>& list);
-  void dumpEvent(const char* optstr, std::ostream& os=std::cout, bool ps=false);
   TVector3 findLeptonVtx(int index, bool& isGoodVtx);
-  void findGenInfo(int leptonId, std::vector<vhtm::GenParticle>& genLepList, std::vector<vhtm::GenParticle>& genTauList);
-  void findLLTGenInfo( std::vector<vhtm::GenParticle>& genMuList, std::vector<vhtm::GenParticle>& genElList, 
-		       std::vector<vhtm::GenParticle>& genTauList);
-  int vetoMuon(double vetoPtCut, double dzTauCut);
-  int vetoElectron(double vetoPtCut, double dzTauCut);
-  int vetoElectronSpl(double vetoPtCut);
-
-  bool electronMVA(const vhtm::Electron& electron);
-  bool eleId(const vhtm::Electron& ele, int bx);
-  bool DYtoeeVeto(TLorentzVector TOS, TLorentzVector TSS, double tauOSemfrac, vhtm::Electron ele, int elIndx);
-  int GenLevelMatching(const TLorentzVector& DetObj, const std::vector<vhtm::GenParticle>& genList);
-  void isGenMatchedDy(int leptonId, std::vector<vhtm::GenParticle>&, bool&);
 
   const std::vector<vhtm::Event>* eventColl() const {return eventList_;}
   const std::vector<vhtm::Vertex>* vertexColl() const {return vertexList_;}
@@ -142,10 +126,12 @@ public:
   const std::vector<vhtm::PackedPFCandidate>* packedPFCandidateColl() const {return packedPFCandidateList_;}
   const std::vector<vhtm::Jet>* jetColl() const {return jetList_;}
   const std::vector<vhtm::MET>* metColl() const {return metList_;}
+  const std::vector<vhtm::MET>* corrmetColl() const {return corrmetList_;}
+  const std::vector<vhtm::MET>* puppimetColl() const {return puppimetList_;}
   const std::vector<vhtm::GenParticle>* genParticleColl() const {return genParticleList_;}
   const std::vector<vhtm::GenJet>* genJetColl() const {return genJetList_;}
   const std::vector<vhtm::GenMET>* genMetColl() const {return genMetList_;}
-  const std::vector<vhtm::TriggerObject>* triggerObjColl() {return triggerObjList_;}
+  const std::vector<vhtm::TriggerObject>* triggerObjColl() const {return triggerObjList_;}
 
   const std::vector<int>* l1physbits() const {return l1physbits_;}
   const std::vector<int>* l1techbits() const {return l1techbits_;}
@@ -157,51 +143,61 @@ public:
   int nelectron() const {return electronList_->size();}
   int nmuon() const {return muonList_->size();}
   int nphoton() const {return photonList_->size();}
-  int npackedPFCandidate() const { return packedPFCandidateList_->size(); }
+  int npackedPFCandidate() const {return packedPFCandidateList_->size();}
   int ntau() const {return tauList_->size();}
   int njet() const {return jetList_->size();}
   int nmet() const {return metList_->size();}
+  int ncorrmet() const {return corrmetList_->size();}
+  int npuppimet() const {return puppimetList_->size();}
   int ngenparticle() const {return genParticleList_->size();}
   int ntriggerobj() const {return triggerObjList_->size();}
   int ngenjet() const {return genJetList_->size();}
   int ngenmet() const {return genMetList_->size();}
 
-  TChain* chain() const {return chain_;}
-  TFile* histf() const {return histf_;}
+  const std::unique_ptr<TChain>& chain() const {return chain_;}
+  std::unique_ptr<TChain>& chain() {return chain_;}
+  const std::unique_ptr<TFile>& histf() const {return histf_;}
+  std::unique_ptr<TFile>& histf() {return histf_;}
 
   int nEvents() const {return nEvents_;}
   int firstEvent() const {return firstEvt_;}
   int lastEvent() const {return lastEvt_;}
+
   ofstream& fLog() {return fLog_;}
   ofstream& evLog() {return evLog_;}
+  ofstream& selEvLog() {return selEvLog_;}
 
+  const ofstream& fLog() const {return fLog_;}
+  const ofstream& evLog() const {return evLog_;}
+  const ofstream& selEvLog() const {return selEvLog_;}
+
+  bool readGenInfo() const {return readGenInfo_;}
   bool isMC() const {return isMC_;}
   bool isSignal() const {return isSignal_;}
   int logOption() const {return logOption_;}
   bool useTrigger() const {return useTrigger_;}
+  bool useLumiWt() const {return useLumiWt_;}
+  double lumiWt(double evtWeightSum=-1, bool verbose=false) const;
   bool usePUWt() const {return usePUWt_;}
   const std::vector<std::string>& trigPathList() const {return trigPathList_;}
   bool useTrueNInt() const {return useTrueNInt_;}
 
-  const std::map<std::string, double>& vtxCutMap() const {return vtxCutMap_;}
-  const std::map<std::string, double>& muonCutMap() const {return muonCutMap_;}
-  const std::map<std::string, double>& photonCutMap() const {return photonCutMap_;}
-  const std::map<std::string, double>& packedPFCandidateCutMap() const {return packedPFCandidateCutMap_;}
-  const std::map<std::string, double>& electronCutMap() const {return electronCutMap_;}
-  const std::map<std::string, double>& tauCutMap() const {return tauCutMap_;}
-  const std::map<std::string, double>& bjetCutMap() const {return bjetCutMap_;}
-  const std::map<std::string, double>& jetCutMap() const {return jetCutMap_;}
-  const std::map<std::string, double>& evselCutMap() const {return evselCutMap_;}
-  const std::map<std::string, int>& eventIdMap() const {return eventIdMap_;}
+  const std::map<std::string, double>& lumiWtMap() const {return AnaUtil::cutMap(hmap_, "lumiWtList");}
+  const std::map<std::string, double>& vtxCutMap() const {return AnaUtil::cutMap(hmap_, "vtxCutList");}
+  const std::map<std::string, double>& muonCutMap() const {return AnaUtil::cutMap(hmap_, "muonCutList");}
+  const std::map<std::string, double>& photonCutMap() const {return AnaUtil::cutMap(hmap_, "photonCutList");}
+  const std::map<std::string, double>& packedPFCandidateCutMap() const {return AnaUtil::cutMap(hmap_, "packedPFCandidateCutList");}
+  const std::map<std::string, double>& electronCutMap() const {return AnaUtil::cutMap(hmap_, "electronCutList");}
+  const std::map<std::string, double>& tauCutMap() const {return AnaUtil::cutMap(hmap_, "tauCutList");}
+  const std::map<std::string, double>& jetCutMap() const {return AnaUtil::cutMap(hmap_, "jetCutList");}
+  const std::map<std::string, double>& evselCutMap() const {return AnaUtil::cutMap(hmap_, "evselCutList");}
+
+  const std::unordered_map<std::string, int>& eventIdMap() const {return eventIdMap_;}
   int bunchCrossing() const {return bunchCrossing_;}
   
-public:
-  double puevWt_;
-  bool emt, eet, mmt;
-
 private:
-  TChain* chain_;      // chain contains a list of root files containing the same tree
-  TFile* histf_;       // The output file with histograms
+  std::unique_ptr<TChain> chain_;      // chain contains a list of root files containing the same tree
+  std::unique_ptr<TFile> histf_;       // The output file with histograms
 
   // The tree branches
   std::vector<vhtm::Event>* eventList_;
@@ -214,6 +210,8 @@ private:
   std::vector<vhtm::PackedPFCandidate>* packedPFCandidateList_;
   std::vector<vhtm::Jet>* jetList_;
   std::vector<vhtm::MET>* metList_;
+  std::vector<vhtm::MET>* corrmetList_;
+  std::vector<vhtm::MET>* puppimetList_;
   std::vector<vhtm::GenParticle>* genParticleList_;
   std::vector<vhtm::GenJet>* genJetList_;
   std::vector<vhtm::GenMET>* genMetList_;
@@ -232,37 +230,33 @@ private:
 
   ofstream fLog_;   
   ofstream evLog_;   
+  ofstream selEvLog_;   
 
-  bool isMC_;
-  bool isSignal_;
-  bool readTrk_;
-  bool readTrigObject_;
+  bool isMC_ {false};
+  bool isSignal_ {false};
+  bool readGenInfo_ {false};
+  bool readTrigObject_ {false};
+  bool readPFObject_ {false};
   std::vector<std::string> fileList_;
-  int logOption_;
-  bool useTrigger_;
-  bool usePUWt_;
+  int logOption_ {0};
+  bool useTrigger_ {false};
+  bool useLumiWt_ {false};
+  bool usePUWt_ {false};
+  std::string puHistFile_ {"./reweightFunctionFall11.root"};
+  std::string puHistogram_ {"pileup"};
+  bool useTrueNInt_ {true};
+  int bunchCrossing_ {25};
+
+  std::string histFile_ {"default.root"};
+  std::string logFile_ {"default.out"};
+  std::string evFile_ {"events.out"};
+  std::string selEvFile_ {"selected_events.out"};
+  int maxEvt_ {0};
+  int firstEvt_ {-1};
+  int lastEvt_ {-1};
+
   std::vector<std::string> trigPathList_;
-
-  std::string histFile_;
-  std::string puHistFile_;
-  bool useTrueNInt_;
-  std::string logFile_;
-  std::string evFile_;
-  int maxEvt_;
-  int bunchCrossing_;
-  int firstEvt_;
-  int lastEvt_;
-
-  std::map<std::string, double> vtxCutMap_;
-  std::map<std::string, double> muonCutMap_;
-  std::map<std::string, double> photonCutMap_;
-  std::map<std::string, double> packedPFCandidateCutMap_;
-  std::map<std::string, double> electronCutMap_;
-  std::map<std::string, double> tauCutMap_;
-  std::map<std::string, double> bjetCutMap_;
-  std::map<std::string, double> jetCutMap_;
-  std::map<std::string, double> evselCutMap_;
-
-  std::map<std::string, int> eventIdMap_;
+  std::map<std::string, std::map<std::string, double>> hmap_;
+  std::unordered_map<std::string, int> eventIdMap_;
 };
 #endif

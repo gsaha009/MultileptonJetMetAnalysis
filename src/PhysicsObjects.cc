@@ -2,24 +2,56 @@
 
 #define NEL(x) (sizeof((x))/sizeof((x)[0]))
 
+ClassImp(vhtm::Event)
+ClassImp(vhtm::GenEvent)
+ClassImp(vhtm::Electron)
+ClassImp(vhtm::GenParticle)
+ClassImp(vhtm::GenJet)
+ClassImp(vhtm::GenMET)
+ClassImp(vhtm::MET)
+ClassImp(vhtm::Tau)
+ClassImp(vhtm::Muon)
+ClassImp(vhtm::Jet)
+ClassImp(vhtm::Vertex)
+ClassImp(vhtm::TriggerObject)
+ClassImp(vhtm::Candidate)
+ClassImp(vhtm::Photon)
+ClassImp(vhtm::PackedPFCandidate)
+
 vhtm::Candidate::Candidate():
-  pt(-999), eta(-999), phi(-999) {} vhtm::Candidate::Candidate(float _pt, float _eta, float _phi):
-  pt(_pt), eta(_eta), phi(_phi) {} vhtm::PackedPFCandidate::PackedPFCandidate():
+  pt(-999), eta(-999), phi(-999) 
+{} 
+
+vhtm::Candidate::Candidate(float _pt, float _eta, float _phi):
+  pt(_pt), eta(_eta), phi(_phi) {} 
+
+vhtm::PackedPFCandidate::PackedPFCandidate():
   pt(-999.),
   eta(-999.), 
   phi(-999.),
   energy(-999.),
+  trackHighPurity(false),
   pdgId(0),
   charge(-999),
   vx(-999.),
   vy(-999.),
   vz(-999.),
   fromPV(-999),
-  dxy(-999.),
-  dz(-999.),
-  dxyError(-999.),
-  dzError(-999.)
-{}
+  dxy(999.),
+  dz(999.),
+  dxyError(999.),
+  dzError(999.),
+  dxyEV(999),
+  dzEV(999),
+  dzAssociatedPV(999),
+  numberOfHits(-1),
+  numberOfPixelHits(-1),
+  pixelLayersWithMeasurement(-1),
+  stripLayersWithMeasurement(-1),
+  lostInnerHits(-99)
+{
+  isolationMap.clear();
+}
 
 vhtm::Event::Event():
   run(0),
@@ -29,12 +61,7 @@ vhtm::Event::Event():
   orbit(0),
   time(-1),
   isdata(false),
-  isPhysDeclared(false),
-  isBPTX0(false),
-  isBSCMinBias(false),
-  isBSCBeamHalo(false),
-  isPrimaryVertex(false),
-  //isBeamScraping(false),
+  hasPrimaryVertex(false),
   rho(-1),
   rhoNeutral(-1),
   nvtx(0),
@@ -51,9 +78,25 @@ vhtm::Event::Event():
 }
 
 vhtm::GenEvent::GenEvent():
+  evtWeight(1),
   processID(0),
-  ptHat(-999)
+  ptHat(-999),
+  nMEPartons(-1),
+  qScale(0),
+  alphaQCD(0),
+  alphaQED(0),
+  qScalePdf(0),
+  x1Pdf(0),
+  x2Pdf(0),
+  id1Pdf(0),
+  id2Pdf(0),
+  lheHt(0),
+  lheNOutPartons(-1)
 {
+  pdfWeightList.clear();
+  alphasWeightList.clear();
+  qcdScaleWeightList.clear();
+
   pdfWeights.clear();
 }
 
@@ -62,6 +105,7 @@ vhtm::Electron::Electron():
   phi(-999),
   pt(-999),
   ecalDriven(false),
+  isGap(false),
   hasGsfTrack(false),
   trackPt(-999),
   energy(-999),
@@ -88,6 +132,7 @@ vhtm::Electron::Electron():
   scET(-999),
   scRawEnergy(-999),
   BDT(-999),
+  BDTpreComp(-999),
   dxyPV(-999),
   dzPV(-999),
   vtxDist3D(-999),
@@ -113,11 +158,13 @@ vhtm::Electron::Electron():
   mvaPreselection(false),
   isTriggerElectron(false),
   fidFlag(0),
-  selbit(0)
+  passMediumId(false),
+  passTightId(false),
+  mvaCategory(false),
+  ElectronMVAEstimatorRun2Spring15NonTrig25nsV1Values(-999.)
 {
   idmap.clear();
 }
-
 vhtm::GenParticle::GenParticle():
   eta(-999),
   phi(-999),
@@ -155,6 +202,8 @@ vhtm::MET::MET():
   met(-999),
   metphi(-999),
   sumet(-999),
+  metJESUp(-999),
+  metJESDn(-999),
   metuncorr(-999),
   metphiuncorr(-999),
   sumetuncorr(-999)
@@ -174,7 +223,9 @@ vhtm::Tau::Tau():
   charge(-999),
   mass(-999),
   dxyPV(-999),
+  dxyPVError(-1),
   dzPV(-999),
+  dzPVError(-1),
   vtxIndex(-1),
   vtxDxy(-999),
   vtxDz(-999),
@@ -186,23 +237,23 @@ vhtm::Tau::Tau():
   ptSumPhotonsIsoCone(-999),
   decayModeFinding(-1),
   decayModeFindingNewDMs(-1),
-  decayModeFindingOldDMs(-1),
-  againstMuonLoose(-1),
-  againstMuonMedium(-1),
-  againstMuonTight(-1),
+  decayMode(-1),
   againstMuonLoose3(-1),
   againstMuonTight3(-1),
-  againstElectronLoose(-1),
-  againstElectronMedium(-1),
-  againstElectronTight(-1),
-  //againstElectronMVA(-1),
-  againstElectronLooseMVA5(-1),
-  againstElectronMediumMVA5(-1),
-  againstElectronTightMVA5(-1),
+  againstElectronVLooseMVA(-1),
+  againstElectronLooseMVA(-1),
+  againstElectronMediumMVA(-1),
+  againstElectronTightMVA(-1),
+  againstElectronVTightMVA(-1),
   byLooseCombinedIsolationDeltaBetaCorr3Hits(-1),
   byMediumCombinedIsolationDeltaBetaCorr3Hits(-1),
   byTightCombinedIsolationDeltaBetaCorr3Hits(-1),
   byCombinedIsolationDeltaBetaCorrRaw3Hits(-1),
+  byVLooseIsolationMVArun2v1DBoldDMwLT(-1),
+  byLooseIsolationMVArun2v1DBoldDMwLT(-1),
+  byMediumIsolationMVArun2v1DBoldDMwLT(-1),
+  byTightIsolationMVArun2v1DBoldDMwLT(-1),
+  byVTightIsolationMVArun2v1DBoldDMwLT(-1),
   chargedIsoPtSum(-1),
   neutralIsoPtSum(-1),
   puCorrPtSum(-1),
@@ -212,8 +263,7 @@ vhtm::Tau::Tau():
   emFraction(-999),
   vx(-999), vy(-999), vz(-999),
   zvertex(-999), 
-  dxySig(-999),
-  selbit(0)
+  dxySig(-999)
 {
   sigChHadList.clear();
   sigNeHadList.clear();
@@ -227,6 +277,13 @@ vhtm::Muon::Muon():
   isTrackerMuon(false),
   isPFMuon(false),
   isghostCleaned(false),
+  passTrackerhighPtid(false),
+  isLooseMuon(false),
+  isMediumMuon(false),
+  isGoodMedMuon(false),
+  isTightMuon(false),
+  chi2LocalPosition(999),
+  trkKink(-999),
   eta(-999),
   phi(-999),
   pt(-999),
@@ -238,11 +295,8 @@ vhtm::Muon::Muon():
   muonBestTrackType(-999),
   globalChi2(9999.),
   tkNChi2(9999.),
-  trkIso(-999),
-  ecalIso(-999),
-  hcalIso(-999),
-  hoIso(-999),
   pfChargedIsoR03(-999),
+  pfChargedHadIsoR03(999.),
   pfNeutralHadIsoR03(999.),
   pfPhotonIso03(999.),
   sumPUPt03(-999),
@@ -280,8 +334,7 @@ vhtm::Muon::Muon():
   stationGapMaskDistance(0),
   stationGapMaskPull(0),
   muonID(false),
-  nSegments(-1),
-  selbit(0)
+  nSegments(-1)
 {}
 
 vhtm::Jet::Jet():
@@ -310,16 +363,12 @@ vhtm::Jet::Jet():
   neutralMultiplicity(-1),
   photonMultiplicity(-1),
   nConstituents(-1),
-  //simpleSecondaryVertexHighEffBTag(-999),
-  //simpleSecondaryVertexHighPurBTag(-999),
   combinedSecondaryVertexBTag(-999),
-  //combinedSecondaryVertexMVABTag(-999),
   combinedInclusiveSecondaryVertexBTag(-999),
-  //combinedMVABTag(-999),
+  pfCombinedInclusiveSecondaryVertexV2BJetTags(-999.),
   jpumva(9999.),
   passLooseID(-1),
-  passTightID(-1),
-  selbit(0) 
+  passTightID(-1)
 {
   discrimap.clear();
 }
@@ -334,12 +383,9 @@ vhtm::Vertex::Vertex():
   rho(-999),
   chi2(999.),
   ndf(-1),
-  //ntracks(-1),
-  //ntracksw05(-1),
   isfake(true),
-  isvalid(false),
-  //sumPt(-999),
-  selbit(0) {}
+  isvalid(false)
+{}
 
 vhtm::TriggerObject::TriggerObject():
   energy(-999),
@@ -424,5 +470,5 @@ vhtm::Photon::Photon():
   distOfMinApproach(-999),
   dPhiTracksAtVtx(-999),
   dPhiTracksAtEcal(-999),
-  dEtaTracksAtEcal(-999),
-  selbit(0) {}
+  dEtaTracksAtEcal(-999)
+{}

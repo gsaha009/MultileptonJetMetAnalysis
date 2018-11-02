@@ -10,11 +10,6 @@
 #include "TDirectory.h"
 #include "TMath.h"
 #include "TLorentzVector.h"
-#include "TH1.h"
-#include "TH2.h"
-#include "TH3.h"
-#include "TProfile.h"
-#include "TH1K.h"
 
 #include "AnaUtil.h"
 
@@ -28,6 +23,7 @@ using std::string;
 using std::vector;
 using std::pair;
 using std::map; 
+using std::unordered_map; 
 
 namespace AnaUtil {
   void tokenize(const string& str, vector<string>& tokens, const string& delimiters) {
@@ -70,60 +66,70 @@ namespace AnaUtil {
     while (dphi <= -TMath::Pi()) dphi += 2 * TMath::Pi();
     return dphi;
   }
-  double deltaPhi(const TLorentzVector &a, const TLorentzVector& b) {
+  double deltaPhi(const TLorentzVector& a, const TLorentzVector& b) {
     return deltaPhi(a.Phi(), b.Phi());
   }
-  double deltaR(const TLorentzVector &a, const TLorentzVector& b) {
+  double deltaR(const TLorentzVector& a, const TLorentzVector& b) {
     double dphi = deltaPhi(a,b);
     double deta = a.Eta() - b.Eta();
     return std::sqrt(dphi * dphi + deta * deta);
   }
-  double cutValue(const map<string, double>& m, string cname) {
-    if (m.find(cname) == m.end()) {
-      cerr << ">>> key: " << cname << " not found in the map!" << endl;
-      for (auto jt  = m.begin(); jt != m.end(); ++jt)  
-        cerr << jt->first << ": " << setw(7) << jt->second << endl;
+  bool sameObject(const TLorentzVector& lv1, const TLorentzVector& lv2) {
+    //return (std::fabs(lv1.Pt() - lv2.Pt()) < 1e-10 && AnaUtil::deltaR(lv1, lv2) < 1e-10);
+    return (std::fabs(lv1.Pt() - lv2.Pt()) < 1.0e-08 && lv1.DeltaR(lv2) < 1.0e-06);
+  }
+  double cutValue(const map<string, double>& m, const string& mkey) {
+    if (m.find(mkey) == m.end()) {
+      cerr << ">>> key: " << mkey << " not found in the map!" << endl;
+      for (auto const& el: m)  
+        cerr << el.first << ": " << setw(7) << el.second << endl;
+      return -999;
     }
     //assert(m.find(cname) != m.end());
-    return m.find(cname)->second;
+    return m.find(mkey)->second;
+  }
+  const map<string, double>& cutMap(const map<string, map<string, double>>& hmap, const string& mkey) {
+    assert(hmap.find(mkey) != hmap.end());
+    return hmap.find(mkey)->second;
   }
   void buildList(const vector<string>& tokens, vector<string>& list) {
     for (vector<string>::const_iterator it  = tokens.begin()+1; 
-         it != tokens.end(); ++it) {
+                                        it != tokens.end(); ++it) {
       list.push_back(*it);       
     }
   }
   void buildMap(const vector<string>& tokens, map<string, int>& hmap) {
     string key = tokens.at(1) + "-" + tokens.at(2) + "-" + tokens.at(3);
-    hmap.insert(pair<string, int>(key, 1));
+    hmap.insert({key, 1});
   }
-  void storeCuts(const vector<string>& tokens, map<string, map<string, double>* >& hmap) {
-    string key = tokens.at(0);
-    map<string, map<string, double>* >::const_iterator pos = hmap.find(key);
-    if (pos != hmap.end()) {
-      map<string, double>* m = pos->second;        
-      for (vector<string>::const_iterator it  = tokens.begin()+1; 
-  	 it != tokens.end(); ++it) {
+  void buildMap(const vector<string>& tokens, unordered_map<string, int>& hmap) {
+    string key = tokens.at(1) + "-" + tokens.at(2) + "-" + tokens.at(3);
+    hmap.insert({key, 1});
+  }
+  void storeCuts(const vector<string>& tokens, map<string, map<string, double>>& hmap) {
+    const string& key = tokens.at(0);
+    auto pos = hmap.find(key);
+    if (pos == hmap.end()) {
+      map<string, double> m;
+      for (auto it = tokens.begin()+1; it != tokens.end(); ++it) {
         // Split the line into words
         vector<string> cutstr;
         tokenize(*it, cutstr, "=");
         if (cutstr.size() < 2) continue;
-        m->insert( pair<string,double>(cutstr.at(0), atof(cutstr.at(1).c_str())));
+        m.insert({cutstr.at(0), atof(cutstr.at(1).c_str())});
       }
-    }    
+      if (!m.empty()) hmap.insert({key, m});
+    }
   }
-  void showCuts(const map<string, map<string, double> >& hmap, ostream& os) {
-    for (map<string, map<string, double> >::const_iterator it  = hmap.begin(); 
-         it != hmap.end(); ++it)  
-      {
-        os << ">>> " << it->first << endl; 
-        map<string, double> m = it->second;
-        os << std::setprecision(2);
-        for (map<string,double>::const_iterator jt  = m.begin(); 
-  	   jt != m.end(); ++jt)  
-          os << setw(16) << jt->first << ": " 
-             << setw(7) << jt->second << endl;
-      }
+  void showCuts(const map<string, map<string, double>>& hmap, ostream& os) {
+    for (auto const& el: hmap) {
+      os << ">>> " << el.first << endl; 
+      auto const& cutm = el.second;
+      os << std::setprecision(2);
+      for (auto const& il: cutm)  
+        os << setw(16) << il.first << ": " 
+           << setw(7)  << il.second << endl;
+    }
   }
   // ------------------------------------------------------------------------
   // Convenience routine for filling 1D histograms. We rely on root to keep 
@@ -135,14 +141,14 @@ namespace AnaUtil {
   // -------------------------------------------------------------------------
   TH1* getHist1D(const char* hname) {
     TObject *obj = gDirectory->GetList()->FindObject(hname); 
-    if (!obj) {
-      cerr << "**** getHist1D: Histogram for <" << hname 
-  	 << "> not found! (" 
-  	 << __FILE__ << ":" << __LINE__ << ")" 
-  	 << endl;
+    if (obj == nullptr) {
+      /*      cerr << "**** getHist1D: Histogram for <" << hname 
+	   << "> not found! (" 
+	   << __FILE__ << ":" << __LINE__ << ")" 
+	   << endl;*/
       return nullptr;
     }
-    TH1 *h = nullptr;
+    TH1* h = nullptr;
     if (obj->InheritsFrom("TH1D"))
       h = dynamic_cast<TH1D*>(obj);
     else if (obj->InheritsFrom("TH1C"))
@@ -156,12 +162,11 @@ namespace AnaUtil {
     else
       h = dynamic_cast<TH1F*>(obj);
     
-    if (!h) {
+    if (h == nullptr) {
       cerr << "**** getHist1D: <" << hname 
   	 << "> may not be a 1D Histogram! (" 
   	 << __FILE__ << ":" << __LINE__ << ")" 
   	 << endl;
-      return nullptr;
     }
     return h;
   }
@@ -174,12 +179,15 @@ namespace AnaUtil {
   // ---------------------------------------------
   TH2* getHist2D(const char* hname) {
     TObject *obj = gDirectory->GetList()->FindObject(hname); 
-    if (!obj) {
-      cerr << "**** getHist2D: Histogram for <" << hname << "> not found!" << endl;
+    if (obj == nullptr) {
+      cerr << "**** getHist2D: Histogram for <" << hname 
+  	 << "> not found! (" 
+  	 << __FILE__ << ":" << __LINE__ << ")" 
+  	 << endl;
       return nullptr;
     }
     
-    TH2 *h = nullptr;
+    TH2* h = nullptr;
     if (obj->InheritsFrom("TH2D"))
       h = dynamic_cast<TH2D*>(obj);
     else if (obj->InheritsFrom("TH2C"))
@@ -191,9 +199,11 @@ namespace AnaUtil {
     else
       h = dynamic_cast<TH2F*>(obj);
     
-    if (!h) {
-      cerr << "**** fillHist2D: <<" << hname << ">> may not be a 2D Histogram" << endl;
-      return nullptr;
+    if (h == nullptr) {
+      cerr << "**** getHist2D: <" << hname 
+  	 << "> may not be a 2D Histogram! (" 
+  	 << __FILE__ << ":" << __LINE__ << ")" 
+  	 << endl;
     }
     return h;
   }
@@ -205,12 +215,15 @@ namespace AnaUtil {
   // ---------------------------------------------
   TH3* getHist3D(const char* hname) {
     TObject *obj = gDirectory->GetList()->FindObject(hname); 
-    if (!obj) {
-      cerr << "**** getHist3D: Histogram for <" << hname << "> not found!" << endl;
-      return 0;
+    if (obj == nullptr) {
+      cerr << "**** getHist3D: Histogram for <" << hname 
+  	 << "> not found! (" 
+  	 << __FILE__ << ":" << __LINE__ << ")" 
+  	 << endl;
+      return nullptr;
     }
     
-    TH3* h = 0;
+    TH3* h = nullptr;
     if (obj->InheritsFrom("TH3D"))
       h = dynamic_cast<TH3D*>(obj);
     else if (obj->InheritsFrom("TH3C"))
@@ -222,9 +235,11 @@ namespace AnaUtil {
     else
       h = dynamic_cast<TH3F*>(obj);
     
-    if (!h) {
-      cerr << "**** fillHist3D: <<" << hname << ">> may not be a 3D Histogram" << endl;
-      return 0;
+    if (h == nullptr) {
+      cerr << "**** getHist3D: <" << hname 
+  	 << "> may not be a 3D Histogram! (" 
+  	 << __FILE__ << ":" << __LINE__ << ")" 
+  	 << endl;
     }
     return h;
   }
@@ -237,9 +252,11 @@ namespace AnaUtil {
   // --------------------------------------------------
   TProfile* getProfile(const char* hname) {
     TProfile *h = dynamic_cast<TProfile*>(gDirectory->GetList()->FindObject(hname));
-    if (!h) {
-      cerr << "**** getProfile: Profile Histogram <" << hname << "> not found" << endl;
-      return 0;
+    if (h == nullptr) {
+      cerr << "**** getProfile: Profile Histogram for <" << hname 
+  	 << "> not found! (" 
+  	 << __FILE__ << ":" << __LINE__ << ")" 
+  	 << endl;
     }
     return h;
   }
@@ -249,7 +266,7 @@ namespace AnaUtil {
   
   bool fillProfile(const char *hname, float xvalue, float yvalue, double w) {
     TProfile *h = getProfile(hname);
-    if (!h) return false;
+    if (h == nullptr) return false;
     
     h->Fill(xvalue, yvalue, w);
     return true;
