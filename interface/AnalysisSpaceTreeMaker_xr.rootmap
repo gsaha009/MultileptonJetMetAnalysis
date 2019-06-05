@@ -1,0 +1,52 @@
+{ decls }
+namespace std {  }
+namespace vhtm {  }
+
+[  ]
+# List of selected classes
+class map<basic_string<char,char_traits<char>,allocator<char> >,unsigned int,less<basic_string<char,char_traits<char>,allocator<char> > >,allocator<pair<const basic_string<char,char_traits<char>,allocator<char> >,unsigned int> > >
+class map<basic_string<char,char_traits<char>,allocator<char> >,vector<double>,less<basic_string<char,char_traits<char>,allocator<char> > >,allocator<pair<const basic_string<char,char_traits<char>,allocator<char> >,vector<double> > > >
+class map<double,std::vector<double> >
+class map<double,vector<double> >
+class map<std::string,std::vector<double> >
+class map<std::string,unsigned int>
+class map<string,unsigned int>
+class map<string,vector<double> >
+class pair<basic_string<char,char_traits<char>,allocator<char> >,unsigned int>
+class pair<std::string,unsigned int>
+class pair<string,unsigned int>
+class pair<vhtm::Muon,vhtm::Muon>
+class vector<basic_string<char,char_traits<char>,allocator<char> > >
+class vector<std::string>
+class vector<string>
+class vector<vhtm::Candidate>
+class vector<vhtm::Electron>
+class vector<vhtm::Event>
+class vector<vhtm::GenEvent>
+class vector<vhtm::GenJet>
+class vector<vhtm::GenMET>
+class vector<vhtm::GenParticle>
+class vector<vhtm::Jet>
+class vector<vhtm::MET>
+class vector<vhtm::Muon>
+class vector<vhtm::PackedPFCandidate>
+class vector<vhtm::Photon>
+class vector<vhtm::Tau>
+class vector<vhtm::TriggerObject>
+class vector<vhtm::Vertex>
+class vhtm::Candidate
+class vhtm::Electron
+class vhtm::Event
+class vhtm::GenEvent
+class vhtm::GenJet
+class vhtm::GenMET
+class vhtm::GenParticle
+class vhtm::Jet
+class vhtm::MET
+class vhtm::Muon
+class vhtm::PackedPFCandidate
+class vhtm::Photon
+class vhtm::Tau
+class vhtm::TriggerObject
+class vhtm::Vertex
+header PhysicsObjects.h

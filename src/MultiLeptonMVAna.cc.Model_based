@@ -1,0 +1,898 @@
+#include "configana.h"
+#include <iostream>
+#include <iomanip>
+#include <algorithm>
+#include <iterator>
+#include <functional>
+#include <numeric>
+#include <string>
+#include <climits>
+#include <cassert>
+#include <cstdlib>
+#include <sstream>
+#include <utility> 
+#include <typeinfo>
+#include <memory>
+
+#include "TROOT.h"
+#include "TSystem.h"
+#include "TChain.h"
+#include "TClonesArray.h"
+#include "TFrame.h"
+#include "TRandom.h"
+#include "TStopwatch.h"
+#include "TFile.h"
+#include "TH1K.h"
+
+#include "LL4JMETUtil.h"
+#include "MultiLeptonMVAna.h"
+
+
+using std::cout;
+using std::cerr;
+using std::endl;
+using std::string;
+using std::ostringstream;
+using std::vector;
+using std::map;
+using std::pair;
+using std::setprecision;
+using std::setw;
+
+using namespace vhtm;
+
+// -----------
+// Constructor
+// -----------
+MultiLeptonMVAna::MultiLeptonMVAna()
+  : PhysicsObjSelector()
+   {}
+
+// ----------
+// Destructor
+// ----------
+MultiLeptonMVAna::~MultiLeptonMVAna() 
+{
+}
+// -------------------------------------------------------
+// Prepare for the run, do necessary initialisation etc.
+// -------------------------------------------------------
+bool MultiLeptonMVAna::beginJob() 
+{ 
+  if (!PhysicsObjSelector::beginJob()) return false;
+
+  histf()->cd();
+  histf()->mkdir("TMVAnalysis");
+  
+  bookHistograms();
+
+#ifdef SKIP_DUPLICATE_ALL
+  eventIdStore_.clear();
+#endif
+
+  if (_createMVATree) {
+    skimObj_ = std::make_unique <MVASkim> (_mvaInputFile);
+    if (!skimObj_) return false;
+  }
+
+  if (_readMVA) {
+    _mvaObj = std::make_unique<MVAnalysis>(_MVAnetwork, _MVAxmlFile);
+    if (!_mvaObj) return false;
+  }
+  return true;
+}
+
+// ---------------
+// Book histograms
+// ---------------
+void MultiLeptonMVAna::bookHistograms()
+{
+  PhysicsObjSelector::bookHistograms();
+  histf()->cd();
+  histf()->cd("TMVAnalysis");
+
+  // book histograms to be filled at different stages
+
+
+  new TH1D("nvtx", "Number of Good vertices", 60, 0, 60);
+  if (isMC()) {
+    new TH1D("puweight", "PU reweight factor", 100, 0, 2);
+    new TH1D("pu_evtWt", "PU nd Evt Wt", 100, 0, 2);
+    new TH1D("evtweight", "Event weight factor (MC events)", 100, -5, 5);
+  }
+
+  //------- Object PLots -----------------------------------------------
+  
+  new TH1D("evtCutFlow", "Event CutFlow", 15, -0.5, 14.5);
+  if (isMC()) new TH1D("evtCutFlowWt", "Event CutFlow (Weighted)", 15, -0.5, 14.5);
+  new TH1D("puppimet", "Missing Transver Energy (PUPPI)", 150, 0, 150);
+  new TH1F("yield" ,"", 1, -0.5, 0.5);
+  if (isMC()) new TH1F("yieldWt", "", 1, -0.5, 0.5);
+
+  //For MVA FlatTree
+  new TH1F("lep1Pt_" ,"", 400, 0., 200.0);
+  new TH1F("lep2Pt_" ,"", 400, 0., 200.0);
+  new TH1F("lepSumPt_" ,"", 400, 0., 200.0);
+  new TH1F("lep1Eta_" ,"", 400, -5., 5.0);
+  new TH1F("lep2Eta_" ,"", 400, -5., 5.0);
+  new TH1F("lepSumCharge_" ,"", 10, -5., 5.0);
+  new TH1F("lepDR_" ,"", 100, 0., 20.0);
+  new TH1F("met_" ,"", 400, 0., 200.0);
+  new TH1F("jet1Pt_" ,"", 400, 0., 200.0);
+  new TH1F("jet2Pt_" ,"", 400, 0., 200.0);
+  new TH1F("jet1Eta_" ,"", 400, -5., 5.0);
+  new TH1F("jet2Eta_" ,"", 400, -5., 5.0);
+  new TH1F("jetSumPt_" ,"", 400, 0., 200.0);
+  new TH1F("jetVecPt_" ,"", 400, 0., 200.0);
+  new TH1F("j1l1dR_" ,"", 100, 0., 20.0);
+  new TH1F("j1l2dR_" ,"", 100, 0., 20.0);
+  new TH1F("j2l1dR_" ,"", 100, 0., 20.0);
+  new TH1F("j2l2dR_" ,"", 100, 0., 20.0);
+  new TH1F("j1j2dR_" ,"", 100, 0., 20.0);
+  new TH1F("l1l2InvM_" ,"", 400, 0., 200.0);
+  new TH1F("jetsInvM_" ,"", 450, 0., 600.0);
+  new TH1F("mass4j" ,"", 900, 0., 600.0);
+  //  new TH1D("evtCutFlow_PrS", "Event CutFlow", 2, -0.5, 1.5);
+  new TH1D("mvaOutput", "", 40, -1.0, 1.0);
+  
+  new TH1D("nSignalJets_", "", 10, -0.5, 9.5);
+  new TH1D("higgsDR_", "", 100, 0., 20.);
+  new TH1D("lep1MetDPhi_", "", 100, -4., 4.);
+  new TH1D("lep2MetDPhi_", "", 100, -4., 4.);
+  new TH1D("mT", "", 400, 0., 200.);
+  new TH1D("sumT", "", 600, 0., 2000.);
+  if (isMC()) new TH1D("sumT_wt", "", 600, 0., 2000.);
+  new TH1D("SameChrLepMass", "", 600, 0., 300.);
+  new TH1D("OppChrSameFlvLepMass", "", 600, 0., 300.);
+  new TH1D("JetPairMass", "", 600, 0., 300.);
+  new TH1D("jet1pT", "", 400, 0., 200.);
+  new TH1D("jet2pT", "", 400, 0., 200.);
+  new TH1D("jet3pT", "", 400, 0., 200.);
+  new TH1D("jet4pT", "", 400, 0., 200.);
+  new TH1D("jet5pT", "", 400, 0., 200.);
+  new TH1D("nJ", "", 32, -0.5, 31.5);
+
+  histf()->cd();
+  histf()->ls();
+}
+
+// -------------------------------
+// Clear vectors before event loop
+// -------------------------------
+
+void MultiLeptonMVAna::clearLists() {
+  PhysicsObjSelector::clear();
+  vtxList_.clear();
+  LepCandList_.clear();
+  JetPairSelected.clear();
+  JetSelected.clear();
+  SignalJets.clear();
+}
+
+// -------------------
+// The main event loop
+// -------------------
+
+void MultiLeptonMVAna::eventLoop()
+{
+  int nPrint = std::max(10000, nEvents()/1000);
+  
+  Options op;
+  op.verbose = false;
+  op.usesbit = true;  // Crucial
+  op.printselected = false;
+  
+  // --------------------
+  // Start the event loop
+  // --------------------
+  string lastFile;
+  int fevt = (firstEvent() > -1) ? firstEvent() : 0;
+  int levt = (lastEvent() > -1) ? lastEvent() : nEvents();
+  cout << ">>> Event range: [" << fevt << ", " << levt -1 << "]" << endl;
+  int nEventSel = 0;
+  
+  for (int ev = fevt; ev < levt; ++ev) {
+    clearEvent(); // reset tree variables 
+    clearLists(); // reset analysis related lists for each event
+    int lflag = chain()->LoadTree(ev);
+    int nbytes = getEntry(lflag);    // returns total bytes read
+    string currentFile(gSystem->BaseName(chain()->GetCurrentFile()->GetName()));
+
+    // For data or for MC without pileup
+    double puevWt = 1; //for Data
+#if 0    
+    if (isMC() && usePUWt()) {
+      int npu = 0;
+      puevWt = wtPileUp(npu);
+    }
+#endif
+    // Show status of the run
+    const Event& evt = eventColl()->at(0);            
+    unsigned long run   = evt.run;
+    unsigned long event = evt.event;
+    unsigned long lumis = evt.lumis;
+    
+    // Show status of the run
+    if (currentFile != lastFile)
+      cout << "Tree# " << setw(4) << chain()->GetTreeNumber()
+	   << " ==> " << chain()->GetCurrentFile()->GetName()
+	   << " <<< Run# " << setw(8) << run
+	   << " Lumis# " << setw(6) << lumis
+	   << " Event# " << setw(12) << event << " >>> "
+	   << " Events proc. " << setw(9) << ev << "(of " << setw(9) << levt-1 << ")"
+	   << endl;
+    lastFile = currentFile;
+    
+    // Show the status
+    if (ev%nPrint == 0 || firstEvent() > -1)
+      cout << "Tree# " << setw(4) << chain()->GetTreeNumber()
+ 	   << " ==> " << currentFile
+	   << " <<< Run# " << setw(8) << run
+	   << " Lumis# " << setw(6) << lumis
+	   << " Event# " << setw(12) << event << " >>> "
+	   << " Events proc. " << setw(8) << ((firstEvent() > -1) ? ev - firstEvent() : ev)
+	   << endl;
+    
+    // Select a set of events by [run, event]
+    if (useEventList_ && eventIdMap().size()) {
+      std::ostringstream mkey;
+      mkey << run << "-" << lumis << "-" << event;
+      if (eventIdMap().find(mkey.str()) != eventIdMap().end()) continue;
+    }
+    
+    histf()->cd();
+    histf()->cd("TMVAnalysis");
+    
+    if (isMC()) {
+      //AnaUtil::fillHist1D("puweight", puevWt);
+      // only when exclusive jets datasets are used (for np = 0)
+      if (0) std::cout << "== nMEPartons: " << genEventColl()->at(0).nMEPartons 
+		       << ", lheNOutPartons: " << genEventColl()->at(0).lheNOutPartons 
+		       << std::endl;
+      if (selectPM_ && genEventColl()->at(0).nMEPartons != nMEPartons_) continue;
+
+      double wt = 1.0;
+      if (!isSignal()) wt = genEventColl()->size() ? genEventColl()->at(0).evtWeight : 1;
+      AnaUtil::fillHist1D("evtweight", wt);      
+      if (usePUWt()) {
+	int npu = 0;
+	puevWt  = wtPileUp(npu, false);
+	AnaUtil::fillHist1D("puweight", puevWt);
+	puevWt *= wt;
+	AnaUtil::fillHist1D("pu_evtWt", puevWt);
+      }
+      
+      evtWeightSum_ += wt;   // this is used for final normalization
+    }
+
+    histf()->cd(); //required
+    histf()->cd("TMVAnalysis");
+    
+    AnaUtil::fillHist1D("evtCutFlow", 0);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 0, puevWt);
+    
+        // at least 1 good PV
+    // good vertex finding
+    op.verbose = (logOption() >> 1 & 0x1);
+    findVtxInfo(vtxList_, op, fLog());
+    size_t ngoodVtx = vtxList_.size();
+    AnaUtil::fillHist1D("nvtx", ngoodVtx, puevWt);
+    if (ngoodVtx < 1) continue;
+
+    AnaUtil::fillHist1D("evtCutFlow", 1);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 1, puevWt);
+
+#ifdef SKIP_DUPLICATE_ALL
+    // Duplicate event removal
+    if (!isMC()) {
+      std::ostringstream mkey;
+      mkey << run << "-" << lumis << "-" << event;
+      std::string evs(mkey.str());
+      if (eventIdStore_.find(evs) != eventIdStore_.end()) {
+	if (0) cout << "DuplicateAll: " << evs << endl;
+	continue;
+      }
+      else {
+	eventIdStore_.insert({evs, 1});
+      }
+    }
+#endif
+
+    AnaUtil::fillHist1D("isTriggered", (isTriggered(true, false)?1:0), puevWt); 
+    
+    // Is event triggered?
+    if (0) dumpTriggerPaths(std::cout, true);
+    if (useTrigger() && !isTriggered(true, false)) continue;
+    
+    AnaUtil::fillHist1D("evtCutFlow", 2);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 2, puevWt);
+    
+    //*********** M A I N  A N A L Y S I S  O B J E C T  S E L E C T I O N ************//
+    double vz = (vtxList_.size() > 0) ? vtxList_.at(0).z : -999;
+    findObjects(vz, 1); // do not use event weight
+    
+
+    //if (genAna_ != nullptr && dumpGenInfo_) genAna_->dumpEvent();
+    //if (getFSRPhotonList().size()) dumpEvent(vz, false, true);
+
+    // Access selected objects 
+    const auto& elePhotonPairList = getTightIsoElePhotonPairList();
+    int nEle = elePhotonPairList.size();
+
+    const auto& muPhotonPairList  = getTightIsoMuPhotonPairList();
+    int nMuon = muPhotonPairList.size();
+
+    const auto& tauList = getIsoTauList();
+    int nTau = tauList.size();
+    
+    const auto& TightJets = getTightJetList();
+    //    int nTightJets = TightJets.size();
+    
+    //    const auto& JetList = getLooseJetList();
+    
+    //********************** A N A L Y S I S **********************//
+    
+    histf()->cd();//Required
+    histf()->cd("TMVAnalysis");
+
+    AnaUtil::fillHist1D("puppimet", puppimetColl()->at(0).met, puevWt);
+
+    //P A C K I N G  L E P T O N S in LepCandList_
+    if (nMuon > 0) packLeptons<vhtm::Muon>(muPhotonPairList, LepCandList_); 
+    if (nEle > 0)  packLeptons<vhtm::Electron>(elePhotonPairList, LepCandList_);
+    AnaUtil::fillHist1D("nLeptonCand", LepCandList_.size(), puevWt);
+
+    addLeptonIsolation(LepCandList_, elePhotonPairList, muPhotonPairList); //add lepton isolation to lepcandidates    
+    std::sort(std::begin(LepCandList_), std::end(LepCandList_), PtComparatorLep<LeptonCandidate>()); //sorting lepton candidates  
+    const MET& mt = puppimetColl()->at(0);
+
+
+    //-----------------------------------------------------------------------------------------------------------//
+    //
+    //__________________________________________________MVA_Analysis_____________________________________________//
+    //
+    //-----------------------------------------------------------------------------------------------------------//
+
+    histf()->cd();
+    histf()->cd("TMVAnalysis");
+
+
+    //_________________________________________PreSelection Begins_______________________________________________//
+
+    if (TightJets.size() < 4) continue;
+    AnaUtil::fillHist1D("evtCutFlow", 3);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 3, puevWt);
+
+    if (TightJets[0].pt < 60) continue; //Tight Jets are already sorted
+    AnaUtil::fillHist1D("evtCutFlow", 4);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 4, puevWt);
+
+    if (LepCandList_.size() < 2) continue; //Lep candidates are already sorted
+    AnaUtil::fillHist1D("evtCutFlow", 5);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 5, puevWt);
+
+    if (LepCandList_.at(0).lCharge * LepCandList_.at(1).lCharge < 0.0) continue; //Leading pT leptons must have same charge
+    AnaUtil::fillHist1D("evtCutFlow", 6);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 6, puevWt);
+
+    AnaUtil::fillHist1D("met_", mt.met, puevWt);
+    if (mt.met <30) continue; //Signal has high met
+    AnaUtil::fillHist1D("evtCutFlow", 7);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 7, puevWt);
+
+    double mtPhi = mt.metphi;
+
+    if (nbJets() > 0) continue; //Signal has no b-jet
+    AnaUtil::fillHist1D("evtCutFlow", 8);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 8, puevWt);
+
+    //jet pairs should reconstruct W Mass
+    for (size_t i1 = 0; i1 < TightJets.size(); ++i1){	
+      const Jet& jet1 = TightJets.at(i1);
+      TLorentzVector jet1p4 = LL4JMETUtil::getP4(jet1);
+      for (size_t i2 = i1 + 1; i2 < TightJets.size(); ++i2) {
+	const Jet& jet2 = TightJets.at(i2);
+	TLorentzVector jet2p4 = LL4JMETUtil::getP4(jet2);
+	double wMass = (jet1p4+jet2p4).M();
+	AnaUtil::fillHist1D("JetPairMass", wMass, puevWt);
+	if (wMass > 20. && wMass < 140.) {
+	  JetPairSelected.push_back(std::make_pair (jet1, jet2));
+	  JetSelected.push_back(jet1);
+	  JetSelected.push_back(jet2);
+	}
+      }
+    }
+    
+    if (JetPairSelected.size() < 2) continue;
+
+    AnaUtil::fillHist1D("evtCutFlow", 9);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 9, puevWt);
+
+
+    double invm_4j = 0.0;
+    bool hasMinTwoUniquePairs = false;
+    double min_dM = 9999.9;
+    int id1 = 0;
+    int id2 = 0;
+    for (size_t i = 0; i < JetPairSelected.size(); ++i){
+      auto& pair1 = JetPairSelected.at(i);
+      TLorentzVector TL11 = LL4JMETUtil::getP4(pair1.first);
+      TLorentzVector TL12 = LL4JMETUtil::getP4(pair1.second);
+      for (size_t j = i+1; j < JetPairSelected.size(); ++j){
+	auto& pair2 = JetPairSelected.at(j);
+	TLorentzVector TL21 = LL4JMETUtil::getP4(pair2.first);
+	TLorentzVector TL22 = LL4JMETUtil::getP4(pair2.second);
+	if (TL11 != TL21 && (TL12 != TL21 && TL12 != TL22)) {
+	  hasMinTwoUniquePairs = true;
+	  invm_4j = (TL11+TL12+TL21+TL22).M();
+	  //AnaUtil::fillHist1D("mass4j", invm_4j, puevWt);
+	  double dM = std::fabs(invm_4j - 176.5);
+	  if (dM < min_dM) {
+	    min_dM = dM;
+	    id1 = i;
+	    id2 = j;
+	  }
+	  //SignalJets.push_back(pair1.first);
+	  //SignalJets.push_back(pair1.second);
+	  //SignalJets.push_back(pair2.first);
+	  //SignalJets.push_back(pair2.second);
+	  //break;
+	  //std::cout<<"Pair"<<i<<"\t"<<TL11.Pt()<<"\t"<<TL12.Pt()<<"\t"<<"Pair"<<j<<"\t"<<TL21.Pt()<<"\t"<<TL22.Pt()<<std::endl;
+	}
+      }
+      //break;
+    }
+    if (!hasMinTwoUniquePairs) continue;
+
+    SignalJets.push_back(JetPairSelected.at(id1).first);
+    SignalJets.push_back(JetPairSelected.at(id1).second);
+    SignalJets.push_back(JetPairSelected.at(id2).first);
+    SignalJets.push_back(JetPairSelected.at(id2).second);
+
+    AnaUtil::fillHist1D("nJ", SignalJets.size(), puevWt);
+
+#if 0
+    for (size_t i = 0; i < JetSelected.size(); ++i){
+      auto& jet1 = JetSelected.at(i);
+      TLorentzVector TL1 = LL4JMETUtil::getP4(jet1);
+      for (size_t j = i+1; j < JetSelected.size(); ++j){
+	auto& jet2 = JetSelected.at(j);
+	TLorentzVector TL2 = LL4JMETUtil::getP4(jet2);
+	if (TL1 == TL2) JetSelected.erase(JetSelected.begin() + j);
+      }
+    }
+      
+    for (size_t i = 0; i < JetSelected.size(); ++i){
+      auto& jet1 = JetSelected.at(i);
+      TLorentzVector TL1 = LL4JMETUtil::getP4(jet1);      
+      for (size_t j = i+1; j < JetSelected.size(); ++j){
+	auto& jet2 = JetSelected.at(j);
+	TLorentzVector TL2 = LL4JMETUtil::getP4(jet2);      
+	if (TL1 == TL2) JetSelected.erase(JetSelected.begin() + j);
+      }
+    }
+    std::sort(std::begin(JetSelected), std::end(JetSelected), PtComparator<vhtm::Jet>());
+
+#endif
+
+
+    AnaUtil::fillHist1D("evtCutFlow", 10);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 10, puevWt);
+
+    std::sort(std::begin(SignalJets), std::end(SignalJets), PtComparator<vhtm::Jet>());
+    //cout<<"Event:::::::::::::::::::::::::  "<<ev<<endl;
+    TLorentzVector lep1P4;
+    TLorentzVector lep2P4;
+    double dR = 0.0;
+    double Mass_2l = 0.0;
+    bool hasZToLL {false};
+    bool hasZMass {false};
+
+    for (size_t i = 0; i < LepCandList_.size(); ++i){
+      auto& lep1 = LepCandList_.at(i);
+      TLorentzVector TL1 = lep1.lP4;
+      if (i == 0) lep1P4 = TL1;
+      double l1c = lep1.lCharge;
+      for (size_t j = i+1; j < LepCandList_.size(); ++j){
+	auto& lep2 = LepCandList_.at(j);
+	TLorentzVector TL2 = lep2.lP4;
+	if (j == 1) lep2P4 = TL2;
+	double l2c = lep2.lCharge;
+	dR = lep1P4.DeltaR(lep2P4);
+	Mass_2l = (lep1P4 + lep2P4).M();
+	AnaUtil::fillHist1D("lepDR_", dR, puevWt);
+	AnaUtil::fillHist1D("l1l2InvM_", Mass_2l, puevWt);
+	double bkg_LepInvM = (TL1+TL2).M(); 
+	
+	if(lep1.flavour == lep2.flavour){
+	  if (l1c * l2c < 0.0) {
+	    AnaUtil::fillHist1D("OppChrSameFlvLepMass", bkg_LepInvM, puevWt);
+	    if (bkg_LepInvM > 40 && bkg_LepInvM < 140){
+	      hasZToLL = true;
+	      break;
+	    }
+	  }
+	  else if ((l1c * l2c) > 0.0) {
+	    AnaUtil::fillHist1D("SameChrLepMass", bkg_LepInvM, puevWt);
+	    if (bkg_LepInvM > 80. && bkg_LepInvM < 100.) {
+	      hasZMass = true;
+	      break;
+	    }
+	  }
+	}
+      }
+    }
+  
+    //dumpEvent(vz, false, true);
+    if (hasZToLL || hasZMass) continue;
+    AnaUtil::fillHist1D("evtCutFlow", 11);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 11, puevWt);
+    
+    AnaUtil::fillHist1D("lep1Pt_", LepCandList_.at(0).lPt, puevWt);
+    AnaUtil::fillHist1D("lep2Pt_", LepCandList_.at(1).lPt, puevWt);
+    AnaUtil::fillHist1D("lep1Eta_", LepCandList_.at(0).lEta, puevWt);
+    AnaUtil::fillHist1D("lep2Eta_", LepCandList_.at(1).lEta, puevWt);
+    AnaUtil::fillHist1D("lepSumCharge_", (LepCandList_.at(0).lCharge + LepCandList_.at(1).lCharge), puevWt);
+
+    double l1metDPhi = TVector2::Phi_mpi_pi(lep1P4.Phi()-mt.metphi);
+    double l2metDPhi = TVector2::Phi_mpi_pi(lep2P4.Phi()-mt.metphi);
+    double transMass = (lep1P4+lep2P4).Mt();
+    double lSumPt = LepCandList_.at(0).lPt + LepCandList_.at(1).lPt;
+    AnaUtil::fillHist1D("lep1MetDPhi_", l1metDPhi, puevWt);
+    AnaUtil::fillHist1D("lep2MetDPhi_", l2metDPhi, puevWt);
+    AnaUtil::fillHist1D("mT", transMass, puevWt);
+    AnaUtil::fillHist1D("lepSumPt_", lSumPt, puevWt);
+
+    double sumPt = 0.0;
+    TLorentzVector j1P4, j2P4;
+    TLorentzVector matchedJetp4;
+    matchedJetp4.SetPtEtaPhiE (0.,0.,0.,0.);
+    std::vector <double> lepJetdR;
+    lepJetdR.clear();
+
+    int ijet = 0;
+    //    for (auto &j: JetSelected) {
+    for (auto &j: SignalJets) {
+      ijet++;
+      sumPt += j.pt;
+      TLorentzVector jP4 = LL4JMETUtil::getP4(j);
+      if (ijet == 1) {
+	j1P4 = jP4;
+	AnaUtil::fillHist1D("jet1pT", j.pt, puevWt);	
+	lepJetdR.push_back(jP4.DeltaR(lep1P4));
+	lepJetdR.push_back(jP4.DeltaR(lep2P4));
+      }
+      if (ijet == 2) {
+	j2P4 = jP4;
+	AnaUtil::fillHist1D("jet2pT", j.pt, puevWt);
+	lepJetdR.push_back(jP4.DeltaR(lep1P4));
+	lepJetdR.push_back(jP4.DeltaR(lep2P4));
+      }
+      if (ijet == 3) AnaUtil::fillHist1D("jet3pT", j.pt, puevWt);
+      if (ijet == 4) AnaUtil::fillHist1D("jet4pT", j.pt, puevWt);
+      matchedJetp4 += jP4;
+      //      if (ijet == 4) break;
+    }
+    AnaUtil::fillHist1D("jetSumPt_", sumPt, puevWt);
+    AnaUtil::fillHist1D("jetVecPt_", matchedJetp4.Pt(), puevWt);
+    AnaUtil::fillHist1D("j1l1dR_", lepJetdR.at(0), puevWt);
+    AnaUtil::fillHist1D("j1l2dR_", lepJetdR.at(1), puevWt);
+    AnaUtil::fillHist1D("j2l1dR_", lepJetdR.at(2), puevWt);
+    AnaUtil::fillHist1D("j2l2dR_", lepJetdR.at(3), puevWt);
+
+    double jetDR = j1P4.DeltaR(j2P4);
+    AnaUtil::fillHist1D("j1j2dR_", jetDR, puevWt);    
+
+    double hDR = (lep1P4+lep2P4).DeltaR(matchedJetp4);
+    AnaUtil::fillHist1D("higgsDR_", hDR, puevWt);
+
+    double jet1hDR = j1P4.DeltaR(matchedJetp4);
+    double jet2hDR = j2P4.DeltaR(matchedJetp4);
+    AnaUtil::fillHist1D("J1HdR_", jet1hDR, puevWt);
+    AnaUtil::fillHist1D("J2HdR_", jet2hDR, puevWt);
+
+    double Mass = matchedJetp4.M();
+    AnaUtil::fillHist1D("jetsInvM_", Mass, puevWt);            
+
+    if (Mass < 70 || Mass > 400) continue;
+    AnaUtil::fillHist1D("evtCutFlow", 12);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 12, puevWt);
+
+    if (nTau > 0) continue;
+    AnaUtil::fillHist1D("evtCutFlow", 13);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 13, puevWt);
+
+    double sT = (SignalJets[0].pt + SignalJets[1].pt + SignalJets[2].pt + SignalJets[3].pt + LepCandList_[0].lPt + LepCandList_[1].lPt + mt.met);
+    AnaUtil::fillHist1D("sumT", sT, 1.0);
+    if (isMC()) AnaUtil::fillHist1D("sumT_wt", sT, puevWt);
+    
+    AnaUtil::fillHist1D("jet1Eta_", SignalJets[0].eta, puevWt);
+    AnaUtil::fillHist1D("jet2Eta_", SignalJets[1].eta, puevWt);
+
+   
+    //_________________________________________End of PreSelection_______________________________________________//    
+      
+    histf()->cd();
+
+    //_____________________________________________MVA Skimming__________________________________________________//    
+
+    if (skimObj_) {
+      TreeVariables varList;
+      varList.nLep         = LepCandList_.size();
+      varList.nJet         = SignalJets.size();
+      varList.lep1Eta      = LepCandList_[0].lEta;
+      varList.lep1Pt       = LepCandList_[0].lPt;
+      varList.lep2Eta      = LepCandList_[1].lEta;
+      varList.lep2Pt       = LepCandList_[1].lPt;
+      varList.lepSumPt     = LepCandList_[0].lPt + LepCandList_[1].lPt;
+      varList.lepSumCharge = LepCandList_[0].lCharge + LepCandList_[1].lCharge;
+      varList.lepDR        = dR;
+      varList.met          = mt.met;
+      varList.MetPhi       = mtPhi;
+      varList.MetL1dPhi    = l1metDPhi;
+      varList.MetL2dPhi    = l2metDPhi;
+      varList.TrMass       = transMass;
+
+      varList.jet1Pt       = SignalJets[0].pt;
+      varList.jet2Pt       = SignalJets[1].pt;
+      varList.jet1Eta      = SignalJets[0].eta;
+      varList.jet2Eta      = SignalJets[1].eta;
+      varList.jetSumPt     = sumPt;
+      varList.jetSumVecPt  = matchedJetp4.Pt();
+      varList.j1l1dR       = lepJetdR.at(0);
+      varList.j1l2dR       = lepJetdR.at(1);
+      varList.j2l1dR       = lepJetdR.at(2);
+      varList.j2l2dR       = lepJetdR.at(3);
+      varList.j1j2dR       = jetDR;
+      varList.h1h2dR       = hDR;
+      varList.HJ1dR        = jet1hDR;
+      varList.HJ2dR        = jet2hDR;
+      varList.l1l2InvM     = Mass_2l;
+      varList.jetsInvM     = Mass;
+
+      skimObj_->fill(varList);
+    }
+
+    //_________________________________________MVA Evaluation_______________________________________________//    
+      
+    histf()->cd();     
+    double mvaOut = -999.9;
+
+
+    if (_readMVA) {
+      InputVariables varlist;
+      varlist.lep1Eta = LepCandList_.at(0).lEta;
+      varlist.lep2Eta = LepCandList_.at(1).lEta;
+      varlist.lepDR = dR;
+      //varlist.met = mt.met;
+      varlist.MetL1dPhi = l1metDPhi;
+      varlist.MetL2dPhi = l2metDPhi;
+      //varlist.jetSumVecPt = matchedJetp4.Pt();
+      //varlist.lepOjetPt = lSumPt/sumPt;
+      varlist.j1l1dR = lepJetdR.at(0);
+      //varlist.j1l2dR = lepJetdR.at(1);
+      varlist.j2l1dR = lepJetdR.at(2);
+      //varlist.j2l2dR = lepJetdR.at(3); 
+      varlist.j1j2dR = jetDR;
+      varlist.HJ1dR  = jet1hDR;
+      varlist.HJ2dR  = jet2hDR;
+      //      varlist.jetsInvM = Mass;
+      varlist.l1l2InvM = Mass_2l;
+
+      //varlist.lep1Eta =  LepCandList_.at(0).lEta;
+      //varlist.lep2Eta = LepCandList_.at(1).lEta;
+      //varlist.nJet    = TightJets.size();
+      mvaOut = _mvaObj->evaluate(_MVAnetwork, varlist);
+    }
+
+    histf()->cd();
+    histf()->cd("TMVAnalysis");
+    
+    AnaUtil::fillHist1D ("mvaOutput", mvaOut, puevWt);    
+   
+    if (mvaOut < 0.29) continue;
+    AnaUtil::fillHist1D("evtCutFlow", 14);
+    if (isMC()) AnaUtil::fillHist1D("evtCutFlowWt", 14);
+    
+    
+    AnaUtil::fillHist1D("yield", 0);
+    if (isMC()) AnaUtil::fillHist1D("yieldWt", 0);
+
+    evLog() << run << " " << lumis << " " << event << std::endl;
+
+    // Print only the first n events; n configurable
+    if (isMC() && dumpEventCount_ > -1 && ++nEventSel >= dumpEventCount_) continue;
+    cout << ">>> "
+         << "<nLooseMuon>: " << getLooseMuList().size()
+         << ", <nMuon>: " << muPhotonPairList.size()
+         << ", <nLooseElectron>: " << getLooseEleList().size()
+         << ", <nElectron>: " << elePhotonPairList.size()
+         << ", <nTau>: " << tauList.size()
+         << ", <nTightJets> " << TightJets.size()
+	 << endl;
+
+    //dumpEvent(vz, false, true);
+  }
+  // Analysis over
+}
+
+void MultiLeptonMVAna::endJob() {
+  PhysicsObjSelector::endJob();
+
+  histf()->cd();
+  histf()->cd("TMVAnalysis");
+  vector<string> evLabels {
+      "0) Events processed:",
+      "1) Have good Vtx:",
+      "2) triggered:",
+      "3) nTightJet >= 4:",
+      "4) Jet1pT >= 60GeV:",
+      "5) nTightIsoLep >= 2:",
+      "6) SameCharged LeadingLeps:",
+      "7) MET >= 30:",
+      "8) No b-Jets:",
+      "9) Min4 Jets Forming W:",
+      "10)has atleast 4 unique Jets:",
+      "11)has no ZToLL: ",
+      "12)4 final jets form H*:",
+      "13)no Tau: ",
+      "14)Passing MVA: "
+      };
+  LL4JMETUtil::showEfficiency("evtCutFlow", evLabels, "Event Selection");  
+
+  double lumiFac = 1.0;
+  if (isMC()) {
+    lumiFac = lumiWt(evtWeightSum_);
+    cout << endl
+         << "evtWeightSum: " << setw(10) << setprecision(0) << evtWeightSum_ << endl
+         << "      lumiWt: " << setw(10) << setprecision(5) << lumiFac
+         << endl;
+  }
+
+  if (isMC()) {
+    LL4JMETUtil::scaleHistogram("evtCutFlowWt", lumiFac);
+    LL4JMETUtil::showEfficiency("evtCutFlowWt", evLabels, "Event Selection (Weighted)", "Events");  
+  }
+}
+
+void MultiLeptonMVAna::closeFiles() {
+  AnaBase::closeFiles();
+  // Take care of local stuff first                                                
+  //  if (_mvaObj != nullptr) _mvaObj->close();
+  if (skimObj_ != nullptr) skimObj_->close();
+  if (syncDumpf_.is_open()) syncDumpf_.close();
+}
+
+
+// -------------------------------------------------------------------------------
+// Poor man's way of a datacard. Each line between the 'START' and 'END' tags
+// is read in turn, split into words, where the first element is the 'key' and
+// the rest the value(s). If more than one values are present they are 
+// stored in a vector. No safety mechanism is in place. Any line with an unknown 
+// key is skipped. Comments lines should start with either '#' or '//', preferably
+// in the first column. Empty lines are skipped. The file containing the datacards 
+// is passed as the only argument of the program, there is no default
+// -------------------------------------------------------------------------------
+bool MultiLeptonMVAna::readJob(const string& jobFile, int& nFiles)
+{
+  if (!PhysicsObjSelector::readJob(jobFile, nFiles)) return false;
+  
+  // Open the same file containing the datacards again to read analysis specific cards
+  ifstream fin(jobFile.c_str(), std::ios::in);    
+  if (!fin) {
+    cerr << "==> Input File: " << jobFile << " could not be opened!" << endl;
+    return false;
+  }
+  
+  eventFilelist_.clear();  
+
+  static constexpr int BUF_SIZE = 256;
+  char buf[BUF_SIZE];
+  while (fin.getline(buf, BUF_SIZE, '\n')) {  // Pops off the newline character
+    string line(buf);
+    if (line.empty() || line == "START") continue;   
+    
+    // enable '#' and '//' style comments
+    if (line.substr(0,1) == "#" || line.substr(0,2) == "//") continue;
+    if (line == "END") break;
+    
+    // Split the line into words
+    vector<string> tokens;
+    AnaUtil::tokenize(line, tokens);
+    std::cout << line << std::endl;
+    assert(tokens.size() > 1);
+    const string& key   = tokens[0];
+    const string& value = tokens[1];
+    if (key == "useEventList")
+      useEventList_ = std::stoi(value.c_str()) > 0 ? true : false;
+    else if (key == "skipDuplicate")
+      skipDuplicate_ = std::stoi(value.c_str()) > 0 ? true : false;
+    else if (key == "dumpGenInfo")
+      dumpGenInfo_ = std::stoi(value.c_str()) > 0 ? true : false;
+    else if (key == "inputEventFile")
+      eventFilelist_.push_back(value.c_str());
+    else if (key == "syncDumpFile")
+      dumpFilename_ = value.c_str();
+    else if (key == "dumpEventMax")
+      dumpEventCount_ = std::stoi(value.c_str());
+    else if (key == "selectPartons")
+      selectPM_ = std::stoi(value.c_str()) > 0 ? true : false;
+    else if (key == "nMEPartons")
+      nMEPartons_ = std::stoi(value.c_str());
+    else if (key == "readMVA")
+      _readMVA = (atoi(value.c_str()) > 0) ? true : false;
+    //else if (key == "mvaInputFile")
+    // _mvaInputFile = value;
+    else if (key == "MVAnetwork")
+      _MVAnetwork = value;
+    else if (key == "MVAxmlFile")
+      _MVAxmlFile = value;
+    else if (key == "createMVATree")
+      _createMVATree = (atoi(value.c_str()) > 0) ? true : false;
+    else if (key == "mvaInputFile")
+      _mvaInputFile = value;
+  }
+  // Close the file
+  fin.close();
+  
+  if (!dumpFilename_.empty()) {
+    syncDumpf_.open(dumpFilename_, std::ios::out);
+    if (!syncDumpf_) {
+      cerr << "Output File: " << dumpFilename_ << " could not be opened!" << endl;
+      return false;
+    }
+  }  
+#ifdef SKIP_DUPLICATE_ZMASS
+  if (skipDuplicate_ && !eventFilelist_.empty()) {
+    eventMap_.clear();
+    for (const auto& f: eventFilelist_) {
+      cout << ">>> Reading file: " << f << endl;
+      ifstream fin(f, std::ios::in);
+      if (!fin) {
+	cerr << "Input file: " << f << " could not be opened!" << endl;
+	continue;
+      }
+      char buf[BUF_SIZE];
+      vector<string> tokens;
+      while (fin.getline(buf, BUF_SIZE, '\n')) {  // Pops off the newline character
+	string line(buf);
+	if (line.empty()) continue;   
+	
+	// enable '#' and '//' style comments
+	if (line.substr(0,1) == "#" || line.substr(0,2) == "//") continue;
+    
+	// Split the line into words
+	//AnaUtil::tokenize(line, tokens);
+	assert(tokens.size() > 2);
+	string key = tokens.at(0) + "-" + tokens.at(1) + "-" + tokens.at(2);
+	eventMap_.insert({key, 1});
+
+	tokens.clear();
+      }
+      // Close the file
+      fin.close();
+    }
+    cout << ">>> Total events present: " << eventMap_.size() << endl;
+  }  
+#endif
+  printJob();
+  
+  //if (readGenInfo()) genAna_ = std::make_unique<GenAnalysis>();
+  //return true;
+}
+void MultiLeptonMVAna::printJob(ostream& os) const
+{
+  AnaBase::printJob(os);
+  os << endl;
+  os << "   useEventList: " << std::boolalpha << useEventList_ << endl
+     << "  skipDuplicate: " << std::boolalpha << skipDuplicate_ << endl
+     << " dumpEventCount: " << dumpEventCount_ << endl
+     << "   syncDumpFile: " << dumpFilename_ << endl
+     << "   dumpEventMax: " << dumpEventCount_ << endl
+     << "  selectPartons: " << std::boolalpha << selectPM_ << endl
+     << "     nMEPartons: " << nMEPartons_ << endl;
+  //  if (isMC()) 
+  //  os << "    dumpGenInfo: " << std::boolalpha << dumpGenInfo_ << endl;
+
+  //AnaUtil::showList(eventFilelist_, ">>> INFO. Input event files:", os);
+}
